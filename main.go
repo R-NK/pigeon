@@ -50,8 +50,6 @@ type image struct {
 	URL string `json:"url"`
 }
 
-var discordWebhook = "https://discordapp.com/api/webhooks/709079444673003552/7X6V2edOC3LTcIK0abKexltwhDeP6kbCGMQ42B-laqxcB8_cdVbxhzKKOqTZMWHLyUYQ"
-
 var re = regexp.MustCompile(`\B@[^ \t\n\r\f]+`)
 var config tomlConfig
 
@@ -191,7 +189,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		fmt.Println(err)
 	}
 
-	err = httpPost(discordWebhook, buf.Bytes())
+	err = httpPost(config.URL, buf.Bytes())
 	if err != nil {
 		log.Fatal(err)
 	}
