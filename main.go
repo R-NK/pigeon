@@ -24,7 +24,34 @@ type user struct {
 	DiscordID string `toml:"discord_id"`
 }
 
+type discordEmbed struct {
+	UserName  string   `json:"username"`
+	AvatarURL string   `json:"avatar_url"`
+	Content   string   `json:"content"`
+	Embeds    []embeds `json:"embeds"`
+}
+
+type embeds struct {
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	URL         string `json:"url"`
+	Color       int64  `json:"color"` //2829099
+	Footer      footer `json:"footer"`
+	// Image image `json:"image"`
+	Thumbnail image `json:"thumbnail"`
+}
+
+type footer struct {
+	Text string `json:"text"`
+	// IconURL string `json:"icon_url"`
+}
+
+type image struct {
+	URL string `json:"url"`
+}
+
 var discordWebhook = "https://discordapp.com/api/webhooks/709079444673003552/7X6V2edOC3LTcIK0abKexltwhDeP6kbCGMQ42B-laqxcB8_cdVbxhzKKOqTZMWHLyUYQ"
+
 var re = regexp.MustCompile(`\B@[^ \t\n\r\f]+`)
 var config tomlConfig
 
@@ -107,24 +134,54 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var str strings.Builder
-	str.WriteString(`クルッポー\r`)
+	str.WriteString("クルッポー\r")
 
 	// is this a PR comment?
 	_, err = dproxy.New(v).M("issue").M("pull_request").M("url").String()
 	if err == nil {
 		fmt.Println("this is PR comment")
-		str.WriteString(`ポッポー（PRでメンションされています。）\r`)
+		str.WriteString("ポッポー（PRでメンションされています。）\r")
 	} else {
 		fmt.Println(err)
 		fmt.Println("this is issue comment")
-		str.WriteString(`ポッポー（Issueでメンションされています。）\r`)
+		str.WriteString("ポッポー（Issueでメンションされています。）\r")
 	}
 
 	str.WriteString(strings.Join(discordIDs, " "))
 
 	fmt.Println("メッセージ\r", str.String())
 
-	err = httpPost(discordWebhook, str.String())
+	title, _ := dproxy.New(v).M("issue").M("title").String()
+	url, _ := dproxy.New(v).M("issue").M("html_url").String()
+	timestamp, _ := dproxy.New(v).M("comment").M("created_at").String()
+	avatarURL, _ := dproxy.New(v).M("comment").M("user").M("avatar_url").String()
+
+	jsonBody := discordEmbed{
+		UserName:  "伝書鳩",
+		AvatarURL: "http://pancos-sozai.com/wp-content/uploads/%E3%83%8F%E3%83%88%E3%81%AE%E3%82%A4%E3%83%A9%E3%82%B9%E3%83%88%E7%B4%A0%E6%9D%9011.png",
+		Content:   str.String(),
+		Embeds: []embeds{
+			{Title: title,
+				Description: comment,
+				URL:         url,
+				Color:       2829099,
+				Footer: footer{
+					Text: timestamp,
+				},
+				Thumbnail: image{
+					URL: avatarURL,
+				}},
+		},
+	}
+	var buf bytes.Buffer
+	encoder := json.NewEncoder(&buf)
+	encoder.SetEscapeHTML(false)
+	err = encoder.Encode(jsonBody)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	err = httpPost(discordWebhook, buf.Bytes())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -148,10 +205,8 @@ func getDiscordID(githubIDPrefix string) (string, error) {
 	return "", fmt.Errorf("%s not found", githubID)
 }
 
-func httpPost(url, message string) error {
-	json := `{"content":"` + message + `"}`
-	fmt.Println(json)
-	req, err := http.NewRequest("POST", url, bytes.NewBuffer([]byte(json)))
+func httpPost(url string, messageByte []byte) error {
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(messageByte))
 	if err != nil {
 		return err
 	}
