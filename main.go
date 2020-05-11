@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"regexp"
 	"strings"
@@ -18,15 +20,16 @@ type tomlConfig struct {
 }
 
 type user struct {
-	githubID  string `toml:"github_id"`
-	discordID string `toml:"discord_id"`
+	GithubID  string `toml:"github_id"`
+	DiscordID string `toml:"discord_id"`
 }
 
+var discordWebhook = "https://discordapp.com/api/webhooks/709079444673003552/7X6V2edOC3LTcIK0abKexltwhDeP6kbCGMQ42B-laqxcB8_cdVbxhzKKOqTZMWHLyUYQ"
 var re = regexp.MustCompile(`\B@[^ \t\n\r\f]+`)
 var config tomlConfig
 
 func main() {
-	if _, err := toml.Decode("settings.toml", &config); err != nil {
+	if _, err := toml.DecodeFile("settings.toml", &config); err != nil {
 		fmt.Println(err)
 		return
 	}
@@ -50,14 +53,6 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-
-	// // Get length
-	// length, err := strconv.Atoi(r.Header.Get("Content-Length"))
-	// if err != nil {
-	// 	fmt.Println("request doesn't have 'Content-Length'")
-	// 	w.WriteHeader(http.StatusInternalServerError)
-	// 	return
-	// }
 
 	// Read body
 	body, err := ioutil.ReadAll(r.Body)
@@ -100,21 +95,40 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Println("parsed", mentions)
 
-	var str strings.Builder
-	str.WriteString("クルッポー")
+	var discordIDs []string
 
-	// is this a PR comment?
-	isPr := !dproxy.New(v).M("created").M("issue").M("pull_request").Nil()
-	if isPr {
-		fmt.Println("this is PR comment")
-		str.WriteString("PRでメンションされています。")
-	} else {
-		fmt.Println("this is issue comment")
-		str.WriteString("Issueでメンションされています。")
+	for _, githubIDPrefix := range mentions {
+		discordID, err := getDiscordID(githubIDPrefix)
+		if err != nil {
+			fmt.Println(err)
+			continue
+		}
+		discordIDs = append(discordIDs, "<@"+discordID+">さん")
 	}
 
-	// dump, _ := httputil.DumpRequest(r, true)
-	// fmt.Println(string(dump))
+	var str strings.Builder
+	str.WriteString(`クルッポー\r`)
+
+	// is this a PR comment?
+	_, err = dproxy.New(v).M("issue").M("pull_request").M("url").String()
+	if err == nil {
+		fmt.Println("this is PR comment")
+		str.WriteString(`ポッポー（PRでメンションされています。）\r`)
+	} else {
+		fmt.Println(err)
+		fmt.Println("this is issue comment")
+		str.WriteString(`ポッポー（Issueでメンションされています。）\r`)
+	}
+
+	str.WriteString(strings.Join(discordIDs, " "))
+
+	fmt.Println("メッセージ\r", str.String())
+
+	err = httpPost(discordWebhook, str.String())
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -122,4 +136,34 @@ func parseMention(comment string) []string {
 	result := re.FindAllString(comment, -1)
 
 	return result
+}
+
+func getDiscordID(githubIDPrefix string) (string, error) {
+	githubID := strings.TrimPrefix(githubIDPrefix, "@")
+	for _, user := range config.Users {
+		if user.GithubID == githubID {
+			return user.DiscordID, nil
+		}
+	}
+	return "", fmt.Errorf("%s not found", githubID)
+}
+
+func httpPost(url, message string) error {
+	json := `{"content":"` + message + `"}`
+	fmt.Println(json)
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer([]byte(json)))
+	if err != nil {
+		return err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	return err
 }
