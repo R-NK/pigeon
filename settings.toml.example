@@ -1,0 +1,15 @@
+discord_webhook_url = "YOUR_DISCORD_WEBHOOK_URL"
+
+# How to find discord id? ref: https://support.discord.com/hc/en-us/articles/206346498-Where-can-I-find-my-User-Server-Message-ID-
+[users]
+    [users.user1]
+    github_id = "User1"
+    discord_id = "0000000000"
+
+    [users.user2]
+    github_id = "User2"
+    discord_id = "1111111111"
+
+    [users.user3]
+    github_id = "User3"
+    discord_id = "2222222222"
