@@ -98,6 +98,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("failed to parse request body to json"))
 		return
 	}
+	log.Println(string(body))
 
 	// created events only supported
 	action, _ := dproxy.New(v).M("action").String()
@@ -138,7 +139,9 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 	// is this a PR comment?
 	_, err = dproxy.New(v).M("issue").M("pull_request").M("url").String()
-	if err == nil {
+	// is this a PR review comment?
+	_, reviewError := dproxy.New(v).M("comment").M("pull_request_url").String()
+	if err == nil || reviewError == nil {
 		fmt.Println("this is PR comment")
 		str.WriteString("ポッポー（PRでメンションされています。）\r")
 	} else {
@@ -151,8 +154,15 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Println("メッセージ\r", str.String())
 
-	title, _ := dproxy.New(v).M("issue").M("title").String()
-	url, _ := dproxy.New(v).M("issue").M("html_url").String()
+	url, _ := dproxy.New(v).M("comment").M("html_url").String()
+	var title string
+	// PR review comment
+	if reviewError == nil {
+		title, _ = dproxy.New(v).M("pull_request").M("title").String()
+	} else {
+		title, _ = dproxy.New(v).M("issue").M("title").String()
+	}
+	fmt.Println(url)
 	timestamp, _ := dproxy.New(v).M("comment").M("created_at").String()
 	avatarURL, _ := dproxy.New(v).M("comment").M("user").M("avatar_url").String()
 
