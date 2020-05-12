@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
 
@@ -59,8 +60,12 @@ func main() {
 		return
 	}
 
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
 	http.HandleFunc("/", handler)
-	_ = http.ListenAndServe(":3000", nil)
+	_ = http.ListenAndServe(fmt.Sprintf(":%s", port), nil)
 
 }
 
